@@ -1,0 +1,98 @@
+---
+title: "Data Science HW 5"
+author: "Caroline Andy"
+date: "11/15/2020"
+output: html_document
+---
+
+### Problem 1
+
+```{r 1}
+#generate homicide table and summarize solved and unsolved murders by state
+library(readr)
+urlfile = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+homicide = read_csv(url(urlfile)) %>%
+  mutate(city_state = paste(city, state)) %>%
+  mutate(outcome = case_when(disposition %in% "Closed without arrest" ~ "unsolved",
+                             disposition %in% "Closed by arrest" ~ "solved", 
+                             disposition %in% "Open/No arrest" ~ "unsolved")) %>%
+  group_by(city_state, outcome) %>%
+  summarize(n_obs = n())
+
+# prop test for Baltimore
+baltimore = homicide %>%
+  filter(city_state == "Baltimore MD") %>%
+  pivot_wider(names_from = "outcome", values_from = "n_obs") %>%
+  mutate(total = solved + unsolved)
+
+baltimore_test = prop.test(x = baltimore$unsolved, n = baltimore$total) %>%
+  broom::tidy() %>%
+  select(estimate, conf.low, conf.high) %>%
+  mutate(conf_int = paste(round(conf.low, 6), sep = " - ", round(conf.high, 6))) %>%
+  select(estimate, conf_int)
+
+# prop test for all cities
+homicide = homicide %>%
+  pivot_wider(names_from = "outcome", values_from = "n_obs") %>%
+  mutate(total = solved + unsolved) 
+
+prop_test = function(city_state) {
+  
+  df = prop.test(x = )
+    
+}
+
+```
+
+Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, list columns and unnest as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
+
+Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+
+
+
+### Problem 2
+```{r load}
+library(tidyverse)
+library(purrr)
+
+load_data = function(path) {
+  
+  df = read_csv(path) %>%
+    janitor::clean_names() %>%
+    pivot_longer(cols = week_1:week_8, names_to = "week", values_to = "observation") %>%
+    mutate(subject = str_extract(path, "0\\d{1}"),
+           week = str_extract(week, "\\d{1}"),
+           arm = str_detect(path, "con"),
+           arm = ifelse(arm == TRUE, "control", "experimental"))
+
+  df
+}
+
+exp_05 = load_data("./data/exp_05.csv")
+ 
+paths = 
+  tibble(
+    file = list.files(path = "./data")) %>%
+  mutate(path = "./data") %>%
+  mutate(path = paste0(path, "/", file)) %>%
+  select(path)
+
+output = map_df(.x = paths, ~ load_data(.x))
+
+```
+
+Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
+
+
+### Problem 3
+
+```{r simulate}
+sim_mean_sd = function(n = 30, mu, sigma = 5) {
+  
+  sim_data = tibble(
+    x = rnorm(n, mean = 0, sd = sigma),
+  ) 
+
+
+
+```
