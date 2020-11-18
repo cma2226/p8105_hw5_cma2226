@@ -38,9 +38,12 @@ homicide = homicide %>%
 
 prop_test = function(city_state) {
   
-  df = prop.test(x = )
+  df = prop.test(x = homicide$unsolved, n = homicide$total) %>%
+    broom::tidy() 
     
 }
+
+output = map_df(.x = homicide, ~ prop_test(.x))
 
 ```
 
@@ -51,38 +54,47 @@ Create a plot that shows the estimates and CIs for each city – check out geom_
 
 
 ### Problem 2
-```{r load}
-library(tidyverse)
-library(purrr)
 
-load_data = function(path) {
-  
-  df = read_csv(path) %>%
-    janitor::clean_names() %>%
-    pivot_longer(cols = week_1:week_8, names_to = "week", values_to = "observation") %>%
-    mutate(subject = str_extract(path, "0\\d{1}"),
-           week = str_extract(week, "\\d{1}"),
-           arm = str_detect(path, "con"),
-           arm = ifelse(arm == TRUE, "control", "experimental"))
-
-  df
-}
-
-exp_05 = load_data("./data/exp_05.csv")
- 
-paths = 
+```{r 2i}
+library(stringr)
+path_df = 
   tibble(
-    file = list.files(path = "./data")) %>%
-  mutate(path = "./data") %>%
-  mutate(path = paste0(path, "/", file)) %>%
-  select(path)
+    path = list.files("data")
+  )
 
-output = map_df(.x = paths, ~ load_data(.x))
-
+path_df = path_df %>%
+  mutate(
+    path = str_c("data/", path),
+    data = map(.x = path, ~read_csv(.x))
+  ) %>%
+  unnest(data) %>%
+  pivot_longer(
+    week_1:week_8,
+    names_to = "week",
+    values_to = "observation"
+  ) %>%
+  mutate(
+    week = as.numeric(str_replace(week, "week_", "")),
+    arm = str_extract(path, "/[a-z][a-z][a-z]"),
+    arm = str_remove(arm, "/"),
+    id = str_extract(path, "[0-9]+")
+  ) %>%
+  select(-path)
 ```
 
 Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
 
+```{r 2ii}
+path_df %>%
+  ggplot(aes(x = week, y = observation, color = id, linetype = arm)) + 
+  geom_line() +
+  labs(
+    title = "Observations for Each Subject by Week",
+    x = "Week Number",
+    y = "Observation",
+    caption = "Data from subjects enrolled in a longitudinal study. Subjects 01 through 05 were enrolled in the control arm, \nand subjects 06 through 10 in the experimental arm"
+  )
+```
 
 ### Problem 3
 
@@ -92,7 +104,31 @@ sim_mean_sd = function(n = 30, mu, sigma = 5) {
   sim_data = tibble(
     x = rnorm(n, mean = 0, sd = sigma),
   ) 
+  
+  sim_data %>%
+    summarize(
+      mu_hat = mean(x),
+      sigma_hat = sd(x)
+    )
+}
 
+output = vector("list", 5000)
+
+for (i in 1:5000) {
+  output[[i]] = sim_mean_sd(30)
+}
+
+sim_results = bind_rows(output)
 
 
 ```
+
+
+For each dataset, save μ̂  and the p-value arising from a test of H:μ=0 using α=0.05. Hint: to obtain the estimate and p-value, use broom::tidy to clean the output of t.test.
+
+Repeat the above for μ={1,2,3,4,5,6}, and complete the following:
+
+Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. Describe the association between effect size and power.
+
+Make a plot showing the average estimate of μ̂  on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ̂  only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ̂  across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+
