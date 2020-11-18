@@ -7,18 +7,26 @@ output: html_document
 
 ### Problem 1
 
-```{r 1}
+For this problem, I will use a dataset containing homicide data for 50 U.S. cities. This dataset contains the following relevant variables: state, city, reported date, victim demographic and identification information, and case disposition. I will use the below code to summarize the number of solved, unsolved and total homicide cases by city. 
+
+```{r 1i}
 #generate homicide table and summarize solved and unsolved murders by state
 library(readr)
+library(tidyverse)
 urlfile = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
 homicide = read_csv(url(urlfile)) %>%
   mutate(city_state = paste(city, state)) %>%
   mutate(outcome = case_when(disposition %in% "Closed without arrest" ~ "unsolved",
                              disposition %in% "Closed by arrest" ~ "solved", 
                              disposition %in% "Open/No arrest" ~ "unsolved")) %>%
+  filter(city_state != "Tulsa AL") %>%
   group_by(city_state, outcome) %>%
   summarize(n_obs = n())
+```
 
+Now I will use the prop.test() function to estimate the proportion of homicides that are unsolved in Baltimore, MD. 
+
+```{r 1ii}
 # prop test for Baltimore
 baltimore = homicide %>%
   filter(city_state == "Baltimore MD") %>%
@@ -30,27 +38,42 @@ baltimore_test = prop.test(x = baltimore$unsolved, n = baltimore$total) %>%
   select(estimate, conf.low, conf.high) %>%
   mutate(conf_int = paste(round(conf.low, 6), sep = " - ", round(conf.high, 6))) %>%
   select(estimate, conf_int)
+```
 
+Now I will generate and extract both the proportion of unsolved homicides and the confidence interval for each of the cities in the homicide dataset. 
+
+```{r 1iii}
 # prop test for all cities
-homicide = homicide %>%
+results_df = homicide %>%
   pivot_wider(names_from = "outcome", values_from = "n_obs") %>%
-  mutate(total = solved + unsolved) 
+  mutate(total = solved + unsolved) %>%
+  mutate(prop_test = map2(.x = unsolved, .y = total, ~prop.test(x = .x, n = .y)),
+  tidy_tests = map(.x = prop_test, ~broom::tidy(.x))) %>%
+  select(-prop_test) %>% 
+  unnest(tidy_tests) %>% 
+  select(city_state, estimate, conf.low, conf.high)
 
-prop_test = function(city_state) {
-  
-  df = prop.test(x = homicide$unsolved, n = homicide$total) %>%
-    broom::tidy() 
-    
-}
+results_df
+```
+I will now generate a plot showing the proportion estimates and confidence intervals for each city. 
 
-output = map_df(.x = homicide, ~ prop_test(.x))
+```{r 1iv}
+results_df %>%
+  arrange(city_state, estimate) %>%
+  ggplot(aes(x = city_state, y = estimate)) + 
+  geom_point() +
+  labs(
+    title = "Rate of Unsolved Homicides by U.S. City",
+    x = "City",
+    y = "Unsolved Homicide Rate",
+    caption = "sdlkfjlsdf'"
+  )
+
+summary(results_df)
 
 ```
 
-Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, list columns and unnest as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
-
 Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
-
 
 
 ### Problem 2
@@ -95,40 +118,84 @@ path_df %>%
     caption = "Data from subjects enrolled in a longitudinal study. Subjects 01 through 05 were enrolled in the control arm, \nand subjects 06 through 10 in the experimental arm"
   )
 ```
+```{r 2iii}
+library(patchwork)
+con = path_df %>%
+  filter(arm == "con") %>%
+  ggplot(aes(x = week, y = observation, color = id)) + 
+  geom_line() +
+  labs(
+    title = "Control Arm Observations",
+    x = "Week Number",
+    y = "Observation"
+  )
+
+exp = path_df %>%
+  filter(arm == "exp") %>%
+  ggplot(aes(x = week, y = observation, color = id)) + 
+  geom_line() +
+  labs(
+    title = "Experimental Arm Observations",
+    x = "Week Number",
+    y = "Observation"
+  )
+
+con + exp
+```
 
 ### Problem 3
 
-```{r simulate}
-sim_mean_sd = function(n = 30, mu, sigma = 5) {
+```{r 3i}
+set.seed(1)
+
+sim_mean_sd = function(mu) {
   
-  sim_data = tibble(
-    x = rnorm(n, mean = 0, sd = sigma),
-  ) 
+    x = rnorm(n = 30, mean = mu, sd = 5)
   
-  sim_data %>%
-    summarize(
-      mu_hat = mean(x),
-      sigma_hat = sd(x)
-    )
+  t.test(x = x, mu = 0, alternative = "two.sided") %>%
+    broom::tidy() %>%
+    select(estimate, p.value)
 }
 
-output = vector("list", 5000)
-
-for (i in 1:5000) {
-  output[[i]] = sim_mean_sd(30)
-}
-
-sim_results = bind_rows(output)
-
+results = tibble(
+  mu = c(0, 1, 2, 3, 4, 5, 6)) %>%
+  mutate(output_lists = map(.x = mu, ~rerun(5000, sim_mean_sd(mu = .x)))) %>%
+  unnest(output_lists) %>%
+  unnest(output_lists) %>%
+  mutate(reject_null = if_else(p.value < 0.05, 1, 0))
 
 ```
 
-
-For each dataset, save μ̂  and the p-value arising from a test of H:μ=0 using α=0.05. Hint: to obtain the estimate and p-value, use broom::tidy to clean the output of t.test.
-
-Repeat the above for μ={1,2,3,4,5,6}, and complete the following:
-
 Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. Describe the association between effect size and power.
 
-Make a plot showing the average estimate of μ̂  on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ̂  only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ̂  across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+```{r 3ii}
+results %>%
+  group_by(mu) %>%
+  summarize(prop_rej = sum(reject_null)/5000) %>%
+  ggplot(aes(x = mu, y = prop_rej)) +
+  geom_line() +
+  labs(
+    title = "Proportion of Times the Null Was Rejected By Mu Value",
+    x = "mu",
+    y = "Proportion of Times Null Was Rejected",
+    caption = "These data were generated "
+  )
+```
+[ANSWER TREND QUESTION]
 
+
+```{r 3iii}
+avg_true = results %>%
+  group_by(mu) %>%
+  summarize(mean_mu_hat = mean(estimate)) %>%
+  ggplot(aes(x = mu, y = mean_mu_hat)) + 
+  geom_line() +
+  labs(
+    title = "Average Mu Estimate Versus True Mu Value",
+    x = "True Mu Value",
+    y = "Average Mu Estimate",
+    caption = "sdlkfjlsdf'"
+  )
+
+```
+Make a plot showing the average estimate of μ̂  on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ̂  only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ̂  across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
