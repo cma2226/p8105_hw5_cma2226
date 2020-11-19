@@ -2,34 +2,45 @@
 title: "Data Science HW 5"
 author: "Caroline Andy"
 date: "11/15/2020"
-output: html_document
+output: github_document
 ---
 
 ### Problem 1
 
-For this problem, I will use a dataset containing homicide data for 50 U.S. cities. This dataset contains the following relevant variables: state, city, reported date, victim demographic and identification information, and case disposition. I will use the below code to summarize the number of solved, unsolved and total homicide cases by city. 
-
-```{r 1i}
-#generate homicide table and summarize solved and unsolved murders by state
-library(readr)
+```{r load, warning = FALSE, message = FALSE}
+library(purrr)
 library(tidyverse)
+library(stringr)
+library(patchwork)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+```
+
+For this problem, I will use a Washington Post dataset containing homicide data for 50 U.S. cities from 2007 to 2017. This dataset contains the following relevant variables: state, city, reported date, victim demographic and identifiable information, and case disposition. I will use the below code to summarize the number of solved, unsolved and total homicide cases by city. 
+
+```{r 1i, message = FALSE, warning = FALSE}
+#generate homicide table and summarize solved and unsolved murders by state
 urlfile = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
 homicide = read_csv(url(urlfile)) %>%
-  mutate(city_state = paste(city, state)) %>%
+  mutate(city_state = str_c(city, state, sep = "_")) %>%
   mutate(outcome = case_when(disposition %in% "Closed without arrest" ~ "unsolved",
                              disposition %in% "Closed by arrest" ~ "solved", 
                              disposition %in% "Open/No arrest" ~ "unsolved")) %>%
-  filter(city_state != "Tulsa AL") %>%
+  filter(city_state != "Tulsa_AL") %>%
   group_by(city_state, outcome) %>%
   summarize(n_obs = n())
 ```
 
 Now I will use the prop.test() function to estimate the proportion of homicides that are unsolved in Baltimore, MD. 
 
-```{r 1ii}
+```{r 1ii, message = FALSE, warning = FALSE}
 # prop test for Baltimore
 baltimore = homicide %>%
-  filter(city_state == "Baltimore MD") %>%
+  filter(city_state == "Baltimore_MD") %>%
   pivot_wider(names_from = "outcome", values_from = "n_obs") %>%
   mutate(total = solved + unsolved)
 
@@ -38,11 +49,13 @@ baltimore_test = prop.test(x = baltimore$unsolved, n = baltimore$total) %>%
   select(estimate, conf.low, conf.high) %>%
   mutate(conf_int = paste(round(conf.low, 6), sep = " - ", round(conf.high, 6))) %>%
   select(estimate, conf_int)
+
+baltimore_test
 ```
 
 Now I will generate and extract both the proportion of unsolved homicides and the confidence interval for each of the cities in the homicide dataset. 
 
-```{r 1iii}
+```{r 1iii, warning = FALSE, message = FALSE}
 # prop test for all cities
 results_df = homicide %>%
   pivot_wider(names_from = "outcome", values_from = "n_obs") %>%
@@ -57,57 +70,59 @@ results_df
 ```
 I will now generate a plot showing the proportion estimates and confidence intervals for each city. 
 
-```{r 1iv}
+```{r 1iv, message = FALSE, warning = FALSE}
 results_df %>%
-  arrange(city_state, estimate) %>%
+  ungroup() %>%
+  mutate(city_state = fct_reorder(city_state, estimate)) %>%
   ggplot(aes(x = city_state, y = estimate)) + 
   geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
   labs(
     title = "Rate of Unsolved Homicides by U.S. City",
     x = "City",
     y = "Unsolved Homicide Rate",
-    caption = "sdlkfjlsdf'"
-  )
+    caption = "This graph depicts the rates of unsolved homicides in 50 U.S. cities from 2007 to 2017."
+  ) +
+  theme(axis.text.x = element_text(angle = 90))
 
-summary(results_df)
 
+view(results_df)
 ```
-
-Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
-
+As we can see from the above graph, the city with the lowest rate of unsolved homicides is Richmond, Virginia; the city with the highest rate of unsolved homicides is Chicago, Illinois. 
 
 ### Problem 2
 
-```{r 2i}
-library(stringr)
+For this problem, I will use a folder of data containing weekly observation measurements for 20 subjects participating in a longitudinal clinical trial. 10 of these subjects are enrolled in the experimental arm, while 10 are enrolled in the control arm. 
+
+I will first create a tidy dataframe containing data from all participants, including the subject ID, arm, and observations over time. 
+
+```{r 2i, message = FALSE, warning = FALSE}
 path_df = 
   tibble(
-    path = list.files("data")
-  )
+    path = list.files("data"))
 
 path_df = path_df %>%
   mutate(
     path = str_c("data/", path),
-    data = map(.x = path, ~read_csv(.x))
-  ) %>%
-  unnest(data) %>%
+    study_data = map(.x = path, ~read_csv(.x))) %>%
+  unnest(study_data) %>%
   pivot_longer(
     week_1:week_8,
     names_to = "week",
-    values_to = "observation"
-  ) %>%
+    values_to = "observation") %>%
   mutate(
     week = as.numeric(str_replace(week, "week_", "")),
     arm = str_extract(path, "/[a-z][a-z][a-z]"),
     arm = str_remove(arm, "/"),
-    id = str_extract(path, "[0-9]+")
-  ) %>%
+    id = str_extract(path, "[0-9]+")) %>%
   select(-path)
+
+path_df
 ```
 
-Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
+Now I will make a spaghetti plot showing observations for each subject over the 8 week study period.
 
-```{r 2ii}
+```{r 2ii, warning = FALSE, message = FALSE}
 path_df %>%
   ggplot(aes(x = week, y = observation, color = id, linetype = arm)) + 
   geom_line() +
@@ -115,11 +130,13 @@ path_df %>%
     title = "Observations for Each Subject by Week",
     x = "Week Number",
     y = "Observation",
-    caption = "Data from subjects enrolled in a longitudinal study. Subjects 01 through 05 were enrolled in the control arm, \nand subjects 06 through 10 in the experimental arm"
+    caption = "Data from subjects enrolled in a longitudinal study. \nSubjects 01 through 05 were enrolled in the control arm, \nand subjects 06 through 10 in the experimental arm"
   )
 ```
-```{r 2iii}
-library(patchwork)
+
+From the above graph, we can clearly see that subjects participating in the experimental study arm had higher observation measurements than subjects participating in the control study arm. We can visualize the weekly study results separately by study arm: 
+
+```{r 2iii, warning = FALSE, message = FALSE}
 con = path_df %>%
   filter(arm == "con") %>%
   ggplot(aes(x = week, y = observation, color = id)) + 
@@ -143,9 +160,13 @@ exp = path_df %>%
 con + exp
 ```
 
+After separating the data by study arm, we can see that subjects enrolled in the experimental arm not only have overall higher observations than subjects enrolled in the control arm, but they also see increases in measurements over the course of the 8 week study period. Subjects enrolled in the control arm have no discernible trend in measurements overtime. 
+
 ### Problem 3
 
-```{r 3i}
+In this problem, I will conduct a simulation to explore power in a simple linear regression. I will generate 5000 datasets, each with size n = 30 and standard deviation = 5, for mu values = 0, 1, 2, 3, 4, 5 and 6. 
+
+```{r 3i, warning = FALSE, message = FALSE}
 set.seed(1)
 
 sim_mean_sd = function(mu) {
@@ -162,13 +183,13 @@ results = tibble(
   mutate(output_lists = map(.x = mu, ~rerun(5000, sim_mean_sd(mu = .x)))) %>%
   unnest(output_lists) %>%
   unnest(output_lists) %>%
-  mutate(reject_null = if_else(p.value < 0.05, 1, 0))
+  mutate(reject_null = if_else(p.value > 0.05, 0, 1))
 
 ```
 
-Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. Describe the association between effect size and power.
+Now I will make a plot showing the true value of mu on the x axis versus the proportion of times the null was rejected (the power of the test) on the y axis. 
 
-```{r 3ii}
+```{r 3ii, warning = FALSE, message = FALSE}
 results %>%
   group_by(mu) %>%
   summarize(prop_rej = sum(reject_null)/5000) %>%
@@ -181,10 +202,11 @@ results %>%
     caption = "These data were generated "
   )
 ```
-[ANSWER TREND QUESTION]
+As we can see in the above graph, as the true mu (effect size) increases, the proportion of times the null was rejected (or power) also increases. The proportion is near 0 when the true mu = 0. As the true mu increases, the proportion of rejections also increases. 
 
+Now I will create a plot showing the average estimate of mu on the y axis and the true value of mu on the x axis. 
 
-```{r 3iii}
+```{r 3iii, warning = FALSE, message = FALSE}
 avg_true = results %>%
   group_by(mu) %>%
   summarize(mean_mu_hat = mean(estimate)) %>%
@@ -197,5 +219,25 @@ avg_true = results %>%
     caption = "sdlkfjlsdf'"
   )
 
+avg_true
 ```
-Make a plot showing the average estimate of μ̂  on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ̂  only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ̂  across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+
+Now I will make a second plot showing the true mu value versus the average estimate of mu hat only in samples for which the null was rejected. 
+
+```{r 3iv, message = FALSE, warning = FALSE}
+avg_mu_hat_vs_true_mu = results %>%
+  filter(reject_null == 1) %>%
+  group_by(mu) %>%
+  summarize(mean_mu_hat = mean(estimate)) %>%
+  ggplot(aes(x = mu, y = mean_mu_hat)) + 
+  geom_line() + 
+  labs(
+    title = "True Mu Value Vs Average Mu Estimate in Samples for Which Null was Rejected",
+    x = "True Mu Value",
+    y = "Average Mu Estimate"
+  )
+
+avg_mu_hat_vs_true_mu
+```
+
+Among tests in which the null hypothesis is rejected, the sample average of mu hat across tests is approximately equal to the true value of mu. This is trend is particularly apparent for mu = 4, mu = 5 and mu = 6. This result is expected, since when the null (mu = 0) is rejected, the estimate is closer to the true mu. 
